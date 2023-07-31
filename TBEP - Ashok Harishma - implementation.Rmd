@@ -1,0 +1,322 @@
+
+
+```{r}
+#loading dataset "locs"
+load("/Users/harishmaashok/Downloads/locs.RData")
+#str(locs)
+```
+
+```{r}
+load("/Users/harishmaashok/Downloads/tfwdat.RData")
+#str(tfwdat)
+```
+
+```{r}
+dim(tfwdat)
+head(tfwdat)
+```
+```{r}
+
+library(plotly)
+library(dplyr)
+
+# creating df "tfwdat_updated" with count of month, name of month and frequency columns. then sort it based on number of month number
+tfwdat_updated <- tfwdat %>%
+  mutate(Month = format(as.Date(Date), "%m"),
+         MonthName = factor(month.abb[as.integer(Month)], levels = month.abb)) %>%
+  count(MonthName)
+
+# Create an interactive bar chart - to find out when most of the happenings has occured
+plot_ly(tfwdat_updated, x = ~MonthName, y = ~n, type = "bar") %>%
+  layout(xaxis = list(title = "Month"), yaxis = list(title = "Frequency"), 
+         title = "Frequency of Months")
+
+```
+
+```{r}
+#which City has been contributing more?
+unique(tfwdat$Org)
+
+Org_counts <- table(tfwdat$Org)
+print(Org_counts)
+
+# Assuming your dataframe is named 'tfwdat'
+tfwdat_updated <- tfwdat %>%
+  count(Org)
+
+# Create an interactive pie chart with a blue color family
+plot_ly(tfwdat_updated, labels = ~Org, values = ~n, type = "pie", 
+        marker = list(colors = c("rgb(31, 119, 180)", "rgb(65, 146, 213)", "rgb(116, 169, 207)", "rgb(166, 189, 219)"))) %>%
+  layout(title = "Organization responsible for litter collection",
+         showlegend = TRUE) 
+
+```
+```{r}
+df <- tfwdat
+df <- df %>% group_by(City)
+df <- df %>% summarize(count = n())
+fig <- df %>% plot_ly(labels = ~City, values = ~count, marker = list(colors = c("rgb(31, 119, 180)", "rgb(65, 146, 213)", "rgb(116, 169, 207)", "rgb(166, 189, 219)")))
+fig <- fig %>% add_pie(hole = 0.6)
+fig <- fig %>% layout(title = "Distribution of Litter Collection Devices Across Cities",  showlegend = T,
+                      xaxis = list(showgrid = TRUE, zeroline = TRUE, showticklabels = TRUE),
+                      yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+
+fig
+
+```
+
+```{r}
+#analysis on data with city = "Tampa"
+tampa_df = tfwdat[tfwdat$City == 'Tampa',]
+unique(tampa_df$Site)
+
+library(tidyr)
+tf_df <- as.data.frame(tfwdat)
+tf_df <- unite(tf_df, sitedate, Site, Date, sep = "-")
+tf_df %>% select('sitedate','dataCards')
+```
+```{r}
+#unnesting dataCards
+tf_df <- tf_df %>% unnest(dataCards)
+colnames(tf_df)
+head(tf_df)
+
+write.csv(tf_df, file = "/Volumes/Harishma College/Microinternship/Tampa/tf_df.csv", row.names = FALSE)
+```
+```{r}
+#Are different devices better/ more effective at capturing certain categories (i.e maybe sea bins capture an abundance of cig butts)
+
+#prepare word cloud
+dev.cat.df <- tf_df %>% select('device', 'item1', 'item2', 'itemcnt')
+dev.cat.df 
+
+tdm <- TermDocumentMatrix(dev.cat.df$item2, control = list(removePunctuation = TRUE, stopwords = TRUE))
+inspect(tdm)
+
+dtm <- DocumentTermMatrix(dev.cat.df$item2, control = 
+                            list(weighting = function(x) weightTfIdf(x, normalize = FALSE), stopwords = TRUE))
+inspect(tdm)
+```
+
+```{r}
+
+# Generate word cloud
+df_frequency <- colSums(as.matrix(dtm))
+word_pal <- brewer.pal(8, "Dark2")
+
+wordcloud(names(df_frequency), df_frequency, max.words = 10, min.freq = 1, 
+          random.order = FALSE, colors = word_pal, font = 3)
+
+# Using a color palette
+library(RColorBrewer)
+word_pal <- brewer.pal(10, "Dark2")
+
+wordcloud(names(df_frequency), df_frequency, min.freq = 1, 
+          random.order = FALSE, colors = word_pal, font = 3)
+
+```
+
+
+```{r}
+#Category Counts: Distribution of Waste Categories
+dev.cat.df 
+value_counts <- table(dev.cat.df$item1)
+
+# Convert to a data frame and sort by counts
+item1.counts.df <- data.frame(category = names(value_counts), count = as.numeric(value_counts))
+item1.counts.df <- item1.counts.df[order(item1.counts.df$count, decreasing = TRUE), ]
+
+# Generate grey colors based on the number of categories
+colors <- gray.colors(length(categories))
+ 
+# Create a bar plot with grey colors
+barplot(item1.counts.df$count, 
+        names.arg = item1.counts.df$category, xlab = "Category", ylab = "Count", main = "Category Counts", 
+        col = colors)
+
+```
+
+
+```{r}
+value_counts <- table(dev.cat.df$item2)
+
+# Convert to a data frame and sort by counts
+item2.counts.df <- data.frame(category = names(value_counts), count = as.numeric(value_counts))
+item2.counts.df <- item2.counts.df[item2.counts.df$count > 1, ]  # Exclude counts of 1
+item2.counts.df <- item2.counts.df[order(item2.counts.df$count, decreasing = TRUE), ]
+
+# Sort the dataframe by count in descending order
+item2.counts.df <- item2.counts.df[order(-item2.counts.df$count), ]
+
+# Generate grey colors based on the number of categories
+colors <- gray.colors(length(item2.counts.df$category))
+
+# Generate a bar chart using Plotly with grey family colors
+plot_ly(item2.counts.df, x = ~category, y = ~count, type = "bar", marker = list(color = colors)) %>% 
+  layout(title = "Category Counts", xaxis = list(title = "Category"),yaxis = list(title = "Count"))
+
+item2.counts.df$category <- factor(item2.counts.df$category, 
+                                   levels = unique(item2.counts.df$category)[order(item2.counts.df$count, decreasing = TRUE)])
+plot_ly(item2.counts.df, x = ~category, y = ~count, type = "bar", name = 'Category counts')
+```
+
+```{r}
+#device analysis
+#boom
+library(plotly)
+
+# Filter the dataframe for device type "Boom"
+boom_df <- dev.cat.df[dev.cat.df$device == "Boom", ]
+
+# Count the occurrences of each 'item1'
+item1_counts <- table(boom_df$item1)
+
+# Generate grey colors based on the number of categories
+colors <- gray.colors(length(item1_counts))
+
+# Create the pie chart for device type "Boom" with grey colors
+pie_chart <- plot_ly(labels = names(item1_counts), values = item1_counts, type = "pie",
+                     textinfo = "label+percent", hoverinfo = "text",
+                     text = ~paste(names(item1_counts), item1_counts, sep = ": "),
+                     marker = list(colors = colors)) %>%
+  layout(title = "Pie Chart for Device Type: Boom")
+
+# Display the pie chart
+pie_chart
+
+
+```
+
+```{r}
+# Filter the dataframe for device type "Watergoat"
+watergoat_df <- dev.cat.df[dev.cat.df$device == "Watergoat", ]
+
+# Count the occurrences of each 'item1'
+item1_counts <- table(watergoat_df$item1)
+
+# Generate grey colors based on the number of categories
+colors <- gray.colors(length(item1_counts))
+
+# Create the pie chart for device type "Watergoat" with grey colors
+pie_chart <- plot_ly(labels = names(item1_counts), values = item1_counts, type = "pie",
+                     textinfo = "label+percent", hoverinfo = "text",
+                     text = ~paste(names(item1_counts), item1_counts, sep = ": "),
+                     marker = list(colors = colors)) %>%
+  layout(title = "Pie Chart for Device Type: Watergoat")
+
+# Display the pie chart
+pie_chart
+```
+
+```{r}
+# Filter the dataframe for device type "Seabin"
+seabin_df <- dev.cat.df[dev.cat.df$device == "Seabin", ]
+
+# Count the occurrences of each 'item1'
+item1_counts <- table(seabin_df$item1)
+
+# Generate grey colors based on the number of categories
+colors <- gray.colors(length(item1_counts))
+
+# Create the pie chart for device type "Boom" with grey colors
+pie_chart <- plot_ly(labels = names(item1_counts), values = item1_counts, type = "pie",
+                     textinfo = "label+percent", hoverinfo = "text",
+                     text = ~paste(names(item1_counts), item1_counts, sep = ": "),
+                     marker = list(colors = colors)) %>%
+  layout(title = "Pie Chart for Device Type: Seabin")
+
+# Display the pie chart
+pie_chart
+```
+
+```{r}
+# Filter the dataframe for device type "Litter Gitter"
+litter_gitter_df <- dev.cat.df[dev.cat.df$device == "Litter Gitter", ]
+
+# Count the occurrences of each 'item1'
+item1_counts <- table(litter_gitter_df$item1)
+
+# Generate grey colors based on the number of categories
+colors <- gray.colors(length(item1_counts))
+
+# Create the pie chart for device type "Litter Gitter" with grey colors
+pie_chart <- plot_ly(labels = names(item1_counts), values = item1_counts, type = "pie",
+                     textinfo = "label+percent", hoverinfo = "text",
+                     text = ~paste(names(item1_counts), item1_counts, sep = ": "),
+                     marker = list(colors = colors)) %>%
+  layout(title = "Pie Chart for Device Type: Litter Gitter")
+
+# Display the pie chart
+pie_chart
+```
+
+```{r}
+# Filter the dataframe for device type "Litter Gitter/Boom"
+litter_gitter_boom_df <- dev.cat.df[dev.cat.df$device == "Litter Gitter/Boom", ]
+
+# Count the occurrences of each 'item1'
+item1_counts <- table(litter_gitter_boom_df$item1)
+
+# Generate grey colors based on the number of categories
+colors <- gray.colors(length(item1_counts))
+
+# Create the pie chart for device type "Litter Gitter/Boom" with grey colors
+pie_chart <- plot_ly(labels = names(item1_counts), values = item1_counts, type = "pie",
+                     textinfo = "label+percent", hoverinfo = "text",
+                     text = ~paste(names(item1_counts), item1_counts, sep = ": "),
+                     marker = list(colors = colors)) %>%
+  layout(title = "Pie Chart for Device Type: Litter Gitter/Boom")
+
+# Display the pie chart
+pie_chart
+```
+
+
+```{r}
+#topic modeling 
+library(topicmodels)
+documents <- dev.cat.df$item2
+corpus <- Corpus(VectorSource(documents))
+# preprocessed text data in a variable called "documents"
+# Create a corpus
+corpus <- Corpus(VectorSource(documents))
+ 
+# Preprocess the corpus
+corpus <- tm_map(corpus, content_transformer(tolower))
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, removeWords, stopwords("english"))
+corpus <- tm_map(corpus, stripWhitespace)
+
+# Create a document-term matrix
+dtm <- DocumentTermMatrix(corpus)
+ 
+# Set the number of topics to discover
+num_topics <- 10
+
+# Apply LDA
+lda_model <- LDA(dtm, k = num_topics)
+
+# Get the terms for each topic
+da_terms <- terms(lda_model, 10)  # Change the number of terms as needed
+# Extract top 10 terms for each topic
+topic_labels <- paste("Topic", 1:10)  # Assign topic labels
+
+# Print the terms for each topic
+for (i in 1:num_topics) {
+  cat(paste("Topic", i, ": ", paste(lda_terms[i, ], collapse = ", "), "\n"))
+}
+
+# Step 5: Assign topics to items
+topic_proportions <- posterior(lda_model)$topics
+dominant_topic <- apply(topic_proportions, 1, which.max)
+dev.cat.df$Topic <- dominant_topic
+
+dev.cat.df
+```
+
+
+
+
+
+
